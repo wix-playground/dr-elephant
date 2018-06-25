@@ -57,16 +57,13 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
     final Configuration config = new Configuration();
     String jhistoryAddr;
     String protocol;
-    switch (config.get(JOB_HISTORY_HTTP_POLICY, "HTTP_ONLY")) {
-      case "HTTPS_ONLY":
-        jhistoryAddr = config.get("mapreduce.jobhistory.webapp.https.address");
-        protocol = "https";
-        break;
-      case "HTTP_ONLY":
-      default:
-        jhistoryAddr = config.get("mapreduce.jobhistory.webapp.address");
-        protocol = "http";
-        break;
+    String httpPolicy = config.get(JOB_HISTORY_HTTP_POLICY, "HTTP_ONLY");
+    if (httpPolicy.equals("HTTPS_ONLY")) {
+      jhistoryAddr = config.get("mapreduce.jobhistory.webapp.https.address");
+      protocol = "https";
+    } else {
+      jhistoryAddr = config.get("mapreduce.jobhistory.webapp.address");
+      protocol = "http";
     }
 
     logger.info("Connecting to the job history server at " + jhistoryAddr + "...");
