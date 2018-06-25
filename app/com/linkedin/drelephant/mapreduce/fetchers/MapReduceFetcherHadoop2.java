@@ -50,20 +50,20 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
   private URLFactory _urlFactory;
   private JSONFactory _jsonFactory;
   private String _jhistoryWebAddr;
+  private String _protocol;
 
   public MapReduceFetcherHadoop2(FetcherConfigurationData fetcherConfData) throws IOException {
     super(fetcherConfData);
 
     final Configuration config = new Configuration();
     String jhistoryAddr;
-    String protocol;
     String httpPolicy = config.get(JOB_HISTORY_HTTP_POLICY, "HTTP_ONLY");
     if (httpPolicy.equals("HTTPS_ONLY")) {
       jhistoryAddr = config.get("mapreduce.jobhistory.webapp.https.address");
-      protocol = "https";
+      _protocol = "https";
     } else {
       jhistoryAddr = config.get("mapreduce.jobhistory.webapp.address");
-      protocol = "http";
+      _protocol = "http";
     }
 
     logger.info("Connecting to the job history server at " + jhistoryAddr + "...");
@@ -71,7 +71,7 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
     logger.info("Connection success.");
 
     _jsonFactory = new JSONFactory();
-    _jhistoryWebAddr = protocol + "://" + jhistoryAddr + "/jobhistory/job/";
+    _jhistoryWebAddr = _protocol + "://" + jhistoryAddr + "/jobhistory/job/";
   }
 
   @Override
@@ -173,7 +173,7 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
     private String _restRoot;
 
     private URLFactory(String hserverAddr) throws IOException {
-      _restRoot = "http://" + hserverAddr + "/ws/v1/history/mapreduce/jobs";
+      _restRoot = _protocol + "://" + hserverAddr + "/ws/v1/history/mapreduce/jobs";
       verifyURL(_restRoot);
     }
 
