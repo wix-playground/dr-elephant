@@ -37,10 +37,12 @@ import org.codehaus.jackson.map.ObjectMapper;
  */
 public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
   private static final Logger logger = Logger.getLogger(AnalyticJobGeneratorHadoop2.class);
-  private static final String RESOURCE_MANAGER_ADDRESS = "yarn.resourcemanager.webapp.address";
+  private static final String RESOURCE_MANAGER_ADDRESS_HTTP = "yarn.resourcemanager.webapp.address";
+  private static final String RESOURCE_MANAGER_ADDRESS_HTTPS = "yarn.resourcemanager.webapp.https.address";
+  private static final String YARN_HTTP_POLICY = "yarn.http.policy";
   private static final String IS_RM_HA_ENABLED = "yarn.resourcemanager.ha.enabled";
   private static final String RESOURCE_MANAGER_IDS = "yarn.resourcemanager.ha.rm-ids";
-  private static final String RM_NODE_STATE_URL = "http://%s/ws/v1/cluster/info";
+  private static final String RM_NODE_STATE_URL = "%s://%s/ws/v1/cluster/info";
   private static final String FETCH_INITIAL_WINDOW_MS = "drelephant.analysis.fetch.initial.windowMillis";
 
   private static Configuration configuration;
@@ -74,10 +76,19 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
         List<String> ids = Arrays.asList(resourceManagers.split(","));
         _currentTime = System.currentTimeMillis();
         updateAuthToken();
+        String httpPolicy = configuration.get(YARN_HTTP_POLICY, "HTTP_ONLY");
         for (String id : ids) {
           try {
-            String resourceManager = configuration.get(RESOURCE_MANAGER_ADDRESS + "." + id);
-            String resourceManagerURL = String.format(RM_NODE_STATE_URL, resourceManager);
+            String resourceManager;
+            String protocol;
+            if (httpPolicy.equals("HTTPS_ONLY")) {
+              resourceManager = configuration.get(RESOURCE_MANAGER_ADDRESS_HTTPS + "." + id);
+              protocol = "https";
+            } else {
+              resourceManager = configuration.get(RESOURCE_MANAGER_ADDRESS_HTTP + "." + id);
+              protocol = "http";
+            }
+            String resourceManagerURL = String.format(RM_NODE_STATE_URL, protocol, resourceManager);
             logger.info("Checking RM URL: " + resourceManagerURL);
             JsonNode rootNode = readJsonNode(new URL(resourceManagerURL));
             String status = rootNode.path("clusterInfo").path("haState").getValueAsText();
@@ -96,11 +107,11 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
         }
       }
     } else {
-      _resourceManagerAddress = configuration.get(RESOURCE_MANAGER_ADDRESS);
+      _resourceManagerAddress = configuration.get(RESOURCE_MANAGER_ADDRESS_HTTPS);
     }
     if (_resourceManagerAddress == null) {
       throw new RuntimeException(
-              "Cannot get YARN resource manager address from Hadoop Configuration property: [" + RESOURCE_MANAGER_ADDRESS
+              "Cannot get YARN resource manager address from Hadoop Configuration property: [" + RESOURCE_MANAGER_ADDRESS_HTTPS
                       + "].");
     }
   }
