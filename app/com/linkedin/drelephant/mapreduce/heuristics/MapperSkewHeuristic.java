@@ -28,6 +28,7 @@ import org.apache.log4j.Logger;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Properties;
 
 
 /**
@@ -57,50 +58,61 @@ public class MapperSkewHeuristic extends GenericSkewHeuristic {
             String appId = data.getAppId();
             String jobId = data.getJobId();
             String jobName = data.getJobName();
-            String user = data.getConf().getProperty("mapreduce.job.user.name", "no-user-found");
+            Properties conf = data.getConf();
+            String user = "no-user-found";
+            if (conf!= null) {
+                user = conf.getProperty("mapreduce.job.user.name", "no-user-found");
+            }
             MapReduceTaskData[] mappers = data.getMapperData();
             MapReduceTaskData[] reducers = data.getReducerData();
 
             long bytesReadHdfs = 0;
             long bytesReadS3 = 0;
-            for (MapReduceTaskData mapper : mappers) {
-                if (mapper.isCounterDataPresent()) {
-                    MapReduceCounterData counters = mapper.getCounters();
-                    bytesReadHdfs += counters.get(MapReduceCounterData.CounterName.HDFS_BYTES_READ);
-                    bytesReadS3 += counters.get(MapReduceCounterData.CounterName.S3_BYTES_READ);
-                    bytesReadS3 += counters.get(MapReduceCounterData.CounterName.S3A_BYTES_READ);
-                    bytesReadS3 += counters.get(MapReduceCounterData.CounterName.S3N_BYTES_READ);
+            if (mappers != null) {
+                for (MapReduceTaskData mapper : mappers) {
+                    if (mapper.isCounterDataPresent()) {
+                        MapReduceCounterData counters = mapper.getCounters();
+                        bytesReadHdfs += counters.get(MapReduceCounterData.CounterName.HDFS_BYTES_READ);
+                        bytesReadS3 += counters.get(MapReduceCounterData.CounterName.S3_BYTES_READ);
+                        bytesReadS3 += counters.get(MapReduceCounterData.CounterName.S3A_BYTES_READ);
+                        bytesReadS3 += counters.get(MapReduceCounterData.CounterName.S3N_BYTES_READ);
+                    }
                 }
             }
 
             long bytesWrittenHdfs = 0;
             long bytesWrittenS3 = 0;
-            for (MapReduceTaskData reducer : reducers) {
-                if (reducer.isCounterDataPresent()) {
-                    MapReduceCounterData counters = reducer.getCounters();
-                    bytesWrittenHdfs += counters.get(MapReduceCounterData.CounterName.HDFS_BYTES_WRITTEN);
-                    bytesWrittenS3 += counters.get(MapReduceCounterData.CounterName.S3_BYTES_WRITTEN);
-                    bytesWrittenS3 += counters.get(MapReduceCounterData.CounterName.S3A_BYTES_WRITTEN);
-                    bytesWrittenS3 += counters.get(MapReduceCounterData.CounterName.S3N_BYTES_WRITTEN);
+            if (reducers != null) {
+                for (MapReduceTaskData reducer : reducers) {
+                    if (reducer.isCounterDataPresent()) {
+                        MapReduceCounterData counters = reducer.getCounters();
+                        bytesWrittenHdfs += counters.get(MapReduceCounterData.CounterName.HDFS_BYTES_WRITTEN);
+                        bytesWrittenS3 += counters.get(MapReduceCounterData.CounterName.S3_BYTES_WRITTEN);
+                        bytesWrittenS3 += counters.get(MapReduceCounterData.CounterName.S3A_BYTES_WRITTEN);
+                        bytesWrittenS3 += counters.get(MapReduceCounterData.CounterName.S3N_BYTES_WRITTEN);
+                    }
                 }
             }
 
-            try {
-                HttpClient client = HttpClientBuilder.create().build();
-                HttpGet get = new HttpGet("http://frog.wix.com/quix?src=11&evid=2025" +
-                        "&application_id=" + appId +
-                        "&bytesReadHDFS=" + bytesReadHdfs +
-                        "&bytesReadS3=" + bytesReadS3 +
-                        "&bytesWrittenHDFS=" + bytesWrittenHdfs +
-                        "&bytesWrittenS3=" + bytesWrittenS3 +
-                        "&jobId=" + jobId +
-                        "&jobName=" + jobName +
-                        "&userEmail=" + user +
-                        "&userId=" + user +
-                        "&ver=1.0");
-                client.execute(get);
-            } catch (IOException e) {
-                logger.warn("Failed send BI event for job: " + jobId, e);
+            if (jobId != null && !jobId.isEmpty()) {
+                try {
+                    HttpClient client = HttpClientBuilder.create().build();
+                    HttpGet get = new HttpGet("http://frog.wix.com/quix?src=11&evid=2025" +
+                            "&application_id=" + appId +
+                            "&bytesReadHDFS=" + bytesReadHdfs +
+                            "&bytesReadS3=" + bytesReadS3 +
+                            "&bytesWrittenHDFS=" + bytesWrittenHdfs +
+                            "&bytesWrittenS3=" + bytesWrittenS3 +
+                            "&jobId=" + jobId +
+                            "&jobName=" + jobName +
+                            "&userEmail=" + user +
+                            "&userId=" + user +
+                            "&ver=1.0");
+                    get.setHeader("User-Agent", "Mozilla/5.0");
+                    client.execute(get);
+                } catch (IOException e) {
+                    logger.warn("Failed send BI event for job: " + jobId, e);
+                }
             }
         }
         return result;
