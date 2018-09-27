@@ -17,16 +17,17 @@
 package com.linkedin.drelephant.mapreduce.heuristics;
 
 import com.linkedin.drelephant.analysis.HeuristicResult;
-import com.linkedin.drelephant.mapreduce.data.MapReduceCounterData;
-import com.linkedin.drelephant.mapreduce.data.MapReduceApplicationData;
-import com.linkedin.drelephant.mapreduce.data.MapReduceTaskData;
 import com.linkedin.drelephant.configurations.heuristic.HeuristicConfigurationData;
+import com.linkedin.drelephant.mapreduce.data.MapReduceApplicationData;
+import com.linkedin.drelephant.mapreduce.data.MapReduceCounterData;
+import com.linkedin.drelephant.mapreduce.data.MapReduceTaskData;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.log4j.Logger;
 
 import java.io.IOException;
+import java.net.URLEncoder;
 import java.util.Arrays;
 import java.util.Properties;
 
@@ -35,21 +36,21 @@ import java.util.Properties;
  * This Heuristic analyses the skewness in the mapper input data
  */
 public class MapperSkewHeuristic extends GenericSkewHeuristic {
-  private static final Logger logger = Logger.getLogger(MapperSkewHeuristic.class);
+    private static final Logger logger = Logger.getLogger(MapperSkewHeuristic.class);
 
-  public MapperSkewHeuristic(HeuristicConfigurationData heuristicConfData) {
-    super(Arrays.asList(
-        MapReduceCounterData.CounterName.HDFS_BYTES_READ,
-        MapReduceCounterData.CounterName.S3_BYTES_READ,
-        MapReduceCounterData.CounterName.S3A_BYTES_READ,
-        MapReduceCounterData.CounterName.S3N_BYTES_READ
-    ), heuristicConfData);
-  }
+    public MapperSkewHeuristic(HeuristicConfigurationData heuristicConfData) {
+        super(Arrays.asList(
+                MapReduceCounterData.CounterName.HDFS_BYTES_READ,
+                MapReduceCounterData.CounterName.S3_BYTES_READ,
+                MapReduceCounterData.CounterName.S3A_BYTES_READ,
+                MapReduceCounterData.CounterName.S3N_BYTES_READ
+        ), heuristicConfData);
+    }
 
-  @Override
-  protected MapReduceTaskData[] getTasks(MapReduceApplicationData data) {
-    return data.getMapperData();
-  }
+    @Override
+    protected MapReduceTaskData[] getTasks(MapReduceApplicationData data) {
+        return data.getMapperData();
+    }
 
     @Override
     public HeuristicResult apply(MapReduceApplicationData data) {
@@ -57,45 +58,47 @@ public class MapperSkewHeuristic extends GenericSkewHeuristic {
         if (result != null) {
             String appId = data.getAppId();
             String jobId = data.getJobId();
-            String jobName = data.getJobName();
-            Properties conf = data.getConf();
-            String user = "no-user-found";
-            if (conf!= null) {
-                user = conf.getProperty("mapreduce.job.user.name", "no-user-found");
-            }
-            MapReduceTaskData[] mappers = data.getMapperData();
-            MapReduceTaskData[] reducers = data.getReducerData();
-
-            long bytesReadHdfs = 0;
-            long bytesReadS3 = 0;
-            if (mappers != null) {
-                for (MapReduceTaskData mapper : mappers) {
-                    if (mapper.isCounterDataPresent()) {
-                        MapReduceCounterData counters = mapper.getCounters();
-                        bytesReadHdfs += counters.get(MapReduceCounterData.CounterName.HDFS_BYTES_READ);
-                        bytesReadS3 += counters.get(MapReduceCounterData.CounterName.S3_BYTES_READ);
-                        bytesReadS3 += counters.get(MapReduceCounterData.CounterName.S3A_BYTES_READ);
-                        bytesReadS3 += counters.get(MapReduceCounterData.CounterName.S3N_BYTES_READ);
-                    }
-                }
-            }
-
-            long bytesWrittenHdfs = 0;
-            long bytesWrittenS3 = 0;
-            if (reducers != null) {
-                for (MapReduceTaskData reducer : reducers) {
-                    if (reducer.isCounterDataPresent()) {
-                        MapReduceCounterData counters = reducer.getCounters();
-                        bytesWrittenHdfs += counters.get(MapReduceCounterData.CounterName.HDFS_BYTES_WRITTEN);
-                        bytesWrittenS3 += counters.get(MapReduceCounterData.CounterName.S3_BYTES_WRITTEN);
-                        bytesWrittenS3 += counters.get(MapReduceCounterData.CounterName.S3A_BYTES_WRITTEN);
-                        bytesWrittenS3 += counters.get(MapReduceCounterData.CounterName.S3N_BYTES_WRITTEN);
-                    }
-                }
-            }
-
             if (jobId != null && !jobId.isEmpty()) {
+                Properties conf = data.getConf();
                 try {
+                    String jobName = "default-job-name";
+                    String user = "no-user-found";
+                    if (conf != null) {
+                        jobName = URLEncoder.encode(conf.getProperty("mapreduce.job.name", "default-job-name"), "ASCII");
+                        user = conf.getProperty("mapreduce.job.user.name", "no-user-found");
+                    }
+                    MapReduceTaskData[] mappers = data.getMapperData();
+                    MapReduceTaskData[] reducers = data.getReducerData();
+
+                    long bytesReadHdfs = 0;
+                    long bytesReadS3 = 0;
+                    if (mappers != null) {
+                        for (MapReduceTaskData mapper : mappers) {
+                            if (mapper.isCounterDataPresent()) {
+                                MapReduceCounterData counters = mapper.getCounters();
+                                bytesReadHdfs += counters.get(MapReduceCounterData.CounterName.HDFS_BYTES_READ);
+                                bytesReadS3 += counters.get(MapReduceCounterData.CounterName.S3_BYTES_READ);
+                                bytesReadS3 += counters.get(MapReduceCounterData.CounterName.S3A_BYTES_READ);
+                                bytesReadS3 += counters.get(MapReduceCounterData.CounterName.S3N_BYTES_READ);
+                            }
+                        }
+                    }
+
+                    long bytesWrittenHdfs = 0;
+                    long bytesWrittenS3 = 0;
+                    if (reducers != null) {
+                        for (MapReduceTaskData reducer : reducers) {
+                            if (reducer.isCounterDataPresent()) {
+                                MapReduceCounterData counters = reducer.getCounters();
+                                bytesWrittenHdfs += counters.get(MapReduceCounterData.CounterName.HDFS_BYTES_WRITTEN);
+                                bytesWrittenS3 += counters.get(MapReduceCounterData.CounterName.S3_BYTES_WRITTEN);
+                                bytesWrittenS3 += counters.get(MapReduceCounterData.CounterName.S3A_BYTES_WRITTEN);
+                                bytesWrittenS3 += counters.get(MapReduceCounterData.CounterName.S3N_BYTES_WRITTEN);
+                            }
+                        }
+                    }
+
+
                     HttpClient client = HttpClientBuilder.create().build();
                     HttpGet get = new HttpGet("http://frog.wix.com/quix?src=11&evid=2025" +
                             "&application_id=" + appId +
