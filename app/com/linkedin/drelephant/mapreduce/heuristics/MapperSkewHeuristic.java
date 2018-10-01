@@ -29,6 +29,7 @@ import org.apache.log4j.Logger;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Properties;
 
 
@@ -67,34 +68,24 @@ public class MapperSkewHeuristic extends GenericSkewHeuristic {
                         jobName = URLEncoder.encode(conf.getProperty("mapreduce.job.name", "default-job-name"), "ASCII");
                         user = conf.getProperty("mapreduce.job.user.name", "no-user-found");
                     }
-                    MapReduceTaskData[] mappers = data.getMapperData();
-                    MapReduceTaskData[] reducers = data.getReducerData();
+                    List<MapReduceTaskData> mappersAndReducers = Arrays.asList(data.getMapperData() != null ? data.getMapperData() : new MapReduceTaskData[]{});
+                    mappersAndReducers.addAll(Arrays.asList(data.getReducerData() != null ? data.getReducerData() : new MapReduceTaskData[]{}));
 
                     long bytesReadHdfs = 0;
                     long bytesReadS3 = 0;
-                    if (mappers != null) {
-                        for (MapReduceTaskData mapper : mappers) {
-                            if (mapper.isCounterDataPresent()) {
-                                MapReduceCounterData counters = mapper.getCounters();
-                                bytesReadHdfs += counters.get(MapReduceCounterData.CounterName.HDFS_BYTES_READ);
-                                bytesReadS3 += counters.get(MapReduceCounterData.CounterName.S3_BYTES_READ);
-                                bytesReadS3 += counters.get(MapReduceCounterData.CounterName.S3A_BYTES_READ);
-                                bytesReadS3 += counters.get(MapReduceCounterData.CounterName.S3N_BYTES_READ);
-                            }
-                        }
-                    }
-
                     long bytesWrittenHdfs = 0;
                     long bytesWrittenS3 = 0;
-                    if (reducers != null) {
-                        for (MapReduceTaskData reducer : reducers) {
-                            if (reducer.isCounterDataPresent()) {
-                                MapReduceCounterData counters = reducer.getCounters();
-                                bytesWrittenHdfs += counters.get(MapReduceCounterData.CounterName.HDFS_BYTES_WRITTEN);
-                                bytesWrittenS3 += counters.get(MapReduceCounterData.CounterName.S3_BYTES_WRITTEN);
-                                bytesWrittenS3 += counters.get(MapReduceCounterData.CounterName.S3A_BYTES_WRITTEN);
-                                bytesWrittenS3 += counters.get(MapReduceCounterData.CounterName.S3N_BYTES_WRITTEN);
-                            }
+                    for (MapReduceTaskData mapperOrReducer : mappersAndReducers) {
+                        if (mapperOrReducer.isCounterDataPresent()) {
+                            MapReduceCounterData counters = mapperOrReducer.getCounters();
+                            bytesReadHdfs += counters.get(MapReduceCounterData.CounterName.HDFS_BYTES_READ);
+                            bytesReadS3 += counters.get(MapReduceCounterData.CounterName.S3_BYTES_READ);
+                            bytesReadS3 += counters.get(MapReduceCounterData.CounterName.S3A_BYTES_READ);
+                            bytesReadS3 += counters.get(MapReduceCounterData.CounterName.S3N_BYTES_READ);
+                            bytesWrittenHdfs += counters.get(MapReduceCounterData.CounterName.HDFS_BYTES_WRITTEN);
+                            bytesWrittenS3 += counters.get(MapReduceCounterData.CounterName.S3_BYTES_WRITTEN);
+                            bytesWrittenS3 += counters.get(MapReduceCounterData.CounterName.S3A_BYTES_WRITTEN);
+                            bytesWrittenS3 += counters.get(MapReduceCounterData.CounterName.S3N_BYTES_WRITTEN);
                         }
                     }
 
