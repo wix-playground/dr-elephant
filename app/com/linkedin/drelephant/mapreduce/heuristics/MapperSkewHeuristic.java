@@ -28,6 +28,7 @@ import org.apache.log4j.Logger;
 
 import java.io.IOException;
 import java.net.URLEncoder;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
@@ -68,7 +69,8 @@ public class MapperSkewHeuristic extends GenericSkewHeuristic {
                         jobName = URLEncoder.encode(conf.getProperty("mapreduce.job.name", "default-job-name"), "ASCII");
                         user = conf.getProperty("mapreduce.job.user.name", "no-user-found");
                     }
-                    List<MapReduceTaskData> mappersAndReducers = Arrays.asList(data.getMapperData() != null ? data.getMapperData() : new MapReduceTaskData[]{});
+                    List<MapReduceTaskData> mappersAndReducers = new ArrayList<MapReduceTaskData>();
+                    mappersAndReducers.addAll(Arrays.asList(data.getMapperData() != null ? data.getMapperData() : new MapReduceTaskData[]{}));
                     mappersAndReducers.addAll(Arrays.asList(data.getReducerData() != null ? data.getReducerData() : new MapReduceTaskData[]{}));
 
                     long bytesReadHdfs = 0;
