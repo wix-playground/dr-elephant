@@ -25,6 +25,7 @@ import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.log4j.Logger;
+import org.joda.time.DateTimeConstants;
 
 import java.io.IOException;
 import java.net.URLEncoder;
@@ -70,8 +71,10 @@ public class MapperSkewHeuristic extends GenericSkewHeuristic {
                         user = conf.getProperty("mapreduce.job.user.name", "no-user-found");
                     }
                     List<MapReduceTaskData> mappersAndReducers = new ArrayList<MapReduceTaskData>();
-                    mappersAndReducers.addAll(Arrays.asList(data.getMapperData() != null ? data.getMapperData() : new MapReduceTaskData[]{}));
-                    mappersAndReducers.addAll(Arrays.asList(data.getReducerData() != null ? data.getReducerData() : new MapReduceTaskData[]{}));
+                    List<MapReduceTaskData> mappers = Arrays.asList(data.getMapperData() != null ? data.getMapperData() : new MapReduceTaskData[]{});
+                    mappersAndReducers.addAll(mappers);
+                    List<MapReduceTaskData> reducers = Arrays.asList(data.getReducerData() != null ? data.getReducerData() : new MapReduceTaskData[]{});
+                    mappersAndReducers.addAll(reducers);
 
                     long bytesReadHdfs = 0;
                     long bytesReadS3 = 0;
@@ -91,6 +94,37 @@ public class MapperSkewHeuristic extends GenericSkewHeuristic {
                         }
                     }
 
+                    double mapGbH = 0;
+                    double redGbH = 0;
+                    double totGbH = 0;
+                    double mapVCpuH = 0;
+                    double redVCpuH = 0;
+                    double totVCpuH = 0;
+                    if (conf != null) {
+                        double mapMemGb = Integer.parseInt(conf.getProperty("mapreduce.map.memory.mb")) / (double) 1024;
+                        double redMemGb = Integer.parseInt(conf.getProperty("mapreduce.reduce.memory.mb")) / (double) 1024;
+                        int mapVCores = Integer.parseInt(conf.getProperty("mapreduce.map.cpu.vcores"));
+                        int redVCores = Integer.parseInt(conf.getProperty("mapreduce.reduce.cpu.vcores"));
+
+                        double mapRunHours = 0;
+                        for (MapReduceTaskData mapper : mappers) {
+                            mapRunHours += mapper.getTotalRunTimeMs() / (double) DateTimeConstants.MILLIS_PER_HOUR;
+                        }
+
+                        double redRunHours = 0;
+                        for (MapReduceTaskData reducer : reducers) {
+                            redRunHours += reducer.getTotalRunTimeMs() / (double) DateTimeConstants.MILLIS_PER_HOUR;
+                        }
+
+                        mapGbH = mapMemGb * mapRunHours;
+                        redGbH = redMemGb * redRunHours;
+                        totGbH = mapGbH  + redGbH;
+
+                        mapVCpuH = mapVCores * mapGbH;
+                        redVCpuH = redVCores * redGbH;
+                        totVCpuH = mapVCpuH + redVCpuH;
+                    }
+
 
                     HttpClient client = HttpClientBuilder.create().build();
                     HttpGet get = new HttpGet("http://frog.wix.com/quix?src=11&evid=2025" +
@@ -99,10 +133,16 @@ public class MapperSkewHeuristic extends GenericSkewHeuristic {
                             "&bytesReadS3=" + bytesReadS3 +
                             "&bytesWrittenHDFS=" + bytesWrittenHdfs +
                             "&bytesWrittenS3=" + bytesWrittenS3 +
+                            "&gb_hours_total=" + String.format("%.3f", totGbH) +
+                            "&gb_hours_reducer=" + String.format("%.3f", redGbH) +
+                            "&gb_hours_mapper=" + String.format("%.3f", mapGbH) +
                             "&jobId=" + jobId +
                             "&jobName=" + jobName +
                             "&userEmail=" + user +
                             "&userId=" + user +
+                            "&vcpu_hours_total=" + String.format("%.3f", totVCpuH) +
+                            "&vcpu_hours_reducer=" + String.format("%.3f", redVCpuH) +
+                            "&vcpu_hours_mapper=" + String.format("%.3f", mapVCpuH) +
                             "&ver=1.0");
                     get.setHeader("User-Agent", "Mozilla/5.0");
                     client.execute(get);
