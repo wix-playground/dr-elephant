@@ -133,16 +133,16 @@ public class MapperSkewHeuristic extends GenericSkewHeuristic {
                             "&bytesReadS3=" + bytesReadS3 +
                             "&bytesWrittenHDFS=" + bytesWrittenHdfs +
                             "&bytesWrittenS3=" + bytesWrittenS3 +
-                            "&gb_hours_total=" + String.format("%.3f", totGbH) +
-                            "&gb_hours_reducer=" + String.format("%.3f", redGbH) +
-                            "&gb_hours_mapper=" + String.format("%.3f", mapGbH) +
+                            "&gb_hours_total=" + (int)(totGbH * 1000) +
+                            "&gb_hours_reducer=" + (int)(redGbH * 1000) +
+                            "&gb_hours_mapper=" + (int)(mapGbH * 1000) +
                             "&jobId=" + jobId +
                             "&jobName=" + jobName +
                             "&userEmail=" + user +
                             "&userId=" + user +
-                            "&vcpu_hours_total=" + String.format("%.3f", totVCpuH) +
-                            "&vcpu_hours_reducer=" + String.format("%.3f", redVCpuH) +
-                            "&vcpu_hours_mapper=" + String.format("%.3f", mapVCpuH) +
+                            "&vcpu_hours_total=" + (int)(totVCpuH * 1000) +
+                            "&vcpu_hours_reducer=" + (int)(redVCpuH * 1000) +
+                            "&vcpu_hours_mapper=" + (int)(mapVCpuH * 1000) +
                             "&ver=1.0");
                     get.setHeader("User-Agent", "Mozilla/5.0");
                     client.execute(get);
