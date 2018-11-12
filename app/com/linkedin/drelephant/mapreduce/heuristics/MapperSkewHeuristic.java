@@ -21,9 +21,13 @@ import com.linkedin.drelephant.configurations.heuristic.HeuristicConfigurationDa
 import com.linkedin.drelephant.mapreduce.data.MapReduceApplicationData;
 import com.linkedin.drelephant.mapreduce.data.MapReduceCounterData;
 import com.linkedin.drelephant.mapreduce.data.MapReduceTaskData;
+import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
+import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
+import org.apache.http.util.EntityUtils;
 import org.apache.log4j.Logger;
 import org.joda.time.DateTimeConstants;
 
@@ -41,7 +45,25 @@ import java.util.Properties;
 public class MapperSkewHeuristic extends GenericSkewHeuristic {
     private static final Logger logger = Logger.getLogger(MapperSkewHeuristic.class);
 
-    private static final HttpClient client = HttpClientBuilder.create().build();
+    private static final int DEFAULT_TIMEOUT = 5000;
+
+    private static PoolingHttpClientConnectionManager clientConnectionManager;
+
+    static {
+        clientConnectionManager = new PoolingHttpClientConnectionManager();
+        clientConnectionManager.setMaxTotal(50);
+        clientConnectionManager.setDefaultMaxPerRoute(50);
+    }
+
+    private static final HttpClient client = HttpClientBuilder.create()
+            .setDefaultRequestConfig(RequestConfig.custom()
+                    .setConnectTimeout(DEFAULT_TIMEOUT)
+                    .setConnectionRequestTimeout(DEFAULT_TIMEOUT)
+                    .setSocketTimeout(DEFAULT_TIMEOUT)
+                    .build())
+            .setConnectionManager(clientConnectionManager)
+            .setConnectionManagerShared(true)
+            .build();
 
 
     public MapperSkewHeuristic(HeuristicConfigurationData heuristicConfData) {
@@ -153,16 +175,12 @@ public class MapperSkewHeuristic extends GenericSkewHeuristic {
                             "&ver=1.0");
 
                     get.setHeader("User-Agent", "Mozilla/5.0");
-                    client.execute(get);
+                    send(get);
 
                     for (String uri : hbaseStats.buildRequests(appId, jobId, jobName, user)) {
                         HttpGet req = new HttpGet(uri);
                         req.setHeader("User-Agent", "Mozilla/5.0");
-                        try {
-                            client.execute(req);
-                        } catch (IOException e) {
-                            logger.warn("Failed send BI event for hbase; job: " + jobId, e);
-                        }
+                        send(req);
                     }
 
                 } catch (IOException e) {
@@ -171,5 +189,17 @@ public class MapperSkewHeuristic extends GenericSkewHeuristic {
             }
         }
         return result;
+    }
+
+    private void send(HttpGet req) {
+        try {
+            HttpResponse response = client.execute(req);
+            if (response != null) {
+                EntityUtils.consumeQuietly(response.getEntity());
+            }
+
+        } catch (IOException e) {
+            logger.warn("Failed send BI event for hbase; job: " + req, e);
+        }
     }
 }

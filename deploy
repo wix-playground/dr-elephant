@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+
+PWD=$(pwd)
+export ARTIFACT_PATH=dr-elephant-wix
+export REMOTE='bi-pig-host0a.42.wixprod.net'
+export USER=$(whoami)
+
+export ACTIVATOR_PATH='/home/alexeyd/activator-dist-1.3.12'
+export CONFIG_PATH='/home/alexeyd/backup-conf'
+export DR_ELEPHANT='dr-elephant-2.1.7'
+
+export ARCH='dr-elephant.tar.gz'
+export REMOTE_TMP='dr-elephant'
+
+cd ..
+
+tar -czvf ${ARCH} ${ARTIFACT_PATH}
+
+ssh -p 41278 ${USER}@${REMOTE} <<EOF
+    sudo -u hdfs kill $(ps ax | grep [d]r-elephant | awk '{print $1}')
+    sudo rm -rf ~/${REMOTE_TMP}; mkdir ~/${REMOTE_TMP}
+EOF
+
+scp -P 41278 ${ARCH} ${USER}@${REMOTE}:~/${REMOTE_TMP}
+
+ssh -p 41278 ${USER}@${REMOTE} <<EOF
+    cd ~/${REMOTE_TMP}
+    tar -xzf ${ARCH}
+    cd ${ARTIFACT_PATH}
+    chmod -R 777 *
+
+    export ACTIVATOR_HOME=${ACTIVATOR_PATH}
+    export PATH=${PATH}:${ACTIVATOR_PATH}/bin
+
+    ./compile.sh
+
+    mv dist/${DR_ELEPHANT}.zip  ..
+    cd ..
+    unzip ${DR_ELEPHANT}.zip
+
+    sudo rm -rf logs
+    mkdir logs
+    chmod -R 777 logs
+
+    cp -r ${CONFIG_PATH}/app-conf/ ${DR_ELEPHANT}
+    cp -r ${CONFIG_PATH}/conf/ ${DR_ELEPHANT}
+
+    chmod -R 777 ${DR_ELEPHANT}
+
+    sudo -u hdfs ${DR_ELEPHANT}/bin/start.sh &
+EOF
+
+cd ${PWD}
