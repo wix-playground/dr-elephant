@@ -21,9 +21,13 @@ import com.linkedin.drelephant.configurations.heuristic.HeuristicConfigurationDa
 import com.linkedin.drelephant.mapreduce.data.MapReduceApplicationData;
 import com.linkedin.drelephant.mapreduce.data.MapReduceCounterData;
 import com.linkedin.drelephant.mapreduce.data.MapReduceTaskData;
+import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
+import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
+import org.apache.http.util.EntityUtils;
 import org.apache.log4j.Logger;
 import org.joda.time.DateTimeConstants;
 
@@ -40,6 +44,27 @@ import java.util.Properties;
  */
 public class MapperSkewHeuristic extends GenericSkewHeuristic {
     private static final Logger logger = Logger.getLogger(MapperSkewHeuristic.class);
+
+    private static final int DEFAULT_TIMEOUT = 5000;
+
+    private static PoolingHttpClientConnectionManager clientConnectionManager;
+
+    static {
+        clientConnectionManager = new PoolingHttpClientConnectionManager();
+        clientConnectionManager.setMaxTotal(50);
+        clientConnectionManager.setDefaultMaxPerRoute(50);
+    }
+
+    private static final HttpClient client = HttpClientBuilder.create()
+            .setDefaultRequestConfig(RequestConfig.custom()
+                    .setConnectTimeout(DEFAULT_TIMEOUT)
+                    .setConnectionRequestTimeout(DEFAULT_TIMEOUT)
+                    .setSocketTimeout(DEFAULT_TIMEOUT)
+                    .build())
+            .setConnectionManager(clientConnectionManager)
+            .setConnectionManagerShared(true)
+            .build();
+
 
     public MapperSkewHeuristic(HeuristicConfigurationData heuristicConfData) {
         super(Arrays.asList(
@@ -75,6 +100,8 @@ public class MapperSkewHeuristic extends GenericSkewHeuristic {
                     mappersAndReducers.addAll(mappers);
                     List<MapReduceTaskData> reducers = Arrays.asList(data.getReducerData() != null ? data.getReducerData() : new MapReduceTaskData[]{});
                     mappersAndReducers.addAll(reducers);
+
+                    HbaseStats hbaseStats = new HbaseStats().update(mappersAndReducers);
 
                     long bytesReadHdfs = 0;
                     long bytesReadS3 = 0;
@@ -118,39 +145,61 @@ public class MapperSkewHeuristic extends GenericSkewHeuristic {
 
                         mapGbH = mapMemGb * mapRunHours;
                         redGbH = redMemGb * redRunHours;
-                        totGbH = mapGbH  + redGbH;
+                        totGbH = mapGbH + redGbH;
 
                         mapVCpuH = mapVCores * mapGbH;
                         redVCpuH = redVCores * redGbH;
                         totVCpuH = mapVCpuH + redVCpuH;
                     }
 
-
-                    HttpClient client = HttpClientBuilder.create().build();
                     HttpGet get = new HttpGet("http://frog.wix.com/quix?src=11&evid=2025" +
                             "&application_id=" + appId +
                             "&bytesReadHDFS=" + bytesReadHdfs +
                             "&bytesReadS3=" + bytesReadS3 +
                             "&bytesWrittenHDFS=" + bytesWrittenHdfs +
                             "&bytesWrittenS3=" + bytesWrittenS3 +
-                            "&gb_hours_total=" + (int)(totGbH * 1000) +
-                            "&gb_hours_reducer=" + (int)(redGbH * 1000) +
-                            "&gb_hours_mapper=" + (int)(mapGbH * 1000) +
+                            "&gb_hours_total=" + (int) (totGbH * 1000) +
+                            "&gb_hours_reducer=" + (int) (redGbH * 1000) +
+                            "&gb_hours_mapper=" + (int) (mapGbH * 1000) +
                             "&jobId=" + jobId +
                             "&jobName=" + jobName +
                             "&userEmail=" + user +
                             "&userId=" + user +
-                            "&vcpu_hours_total=" + (int)(totVCpuH * 1000) +
-                            "&vcpu_hours_reducer=" + (int)(redVCpuH * 1000) +
-                            "&vcpu_hours_mapper=" + (int)(mapVCpuH * 1000) +
+                            "&vcpu_hours_total=" + (int) (totVCpuH * 1000) +
+                            "&vcpu_hours_reducer=" + (int) (redVCpuH * 1000) +
+                            "&vcpu_hours_mapper=" + (int) (mapVCpuH * 1000) +
+                            "&jobStatus=" + (data.getSucceeded() ? "SUCCEEDED" : "FAILED") +
+                            "&jobStopTime=" + data.getFinishTime() +
+                            "&jobStartTime=" + data.getStartTime() +
+                            "&jobSubmitTime=" + data.getSubmitTime() +
                             "&ver=1.0");
+
                     get.setHeader("User-Agent", "Mozilla/5.0");
-                    client.execute(get);
+                    send(get);
+
+                    for (String uri : hbaseStats.buildRequests(appId, jobId, jobName, user)) {
+                        HttpGet req = new HttpGet(uri);
+                        req.setHeader("User-Agent", "Mozilla/5.0");
+                        send(req);
+                    }
+
                 } catch (IOException e) {
                     logger.warn("Failed send BI event for job: " + jobId, e);
                 }
             }
         }
         return result;
+    }
+
+    private void send(HttpGet req) {
+        try {
+            HttpResponse response = client.execute(req);
+            if (response != null) {
+                EntityUtils.consumeQuietly(response.getEntity());
+            }
+
+        } catch (IOException e) {
+            logger.warn("Failed send BI event for hbase; job: " + req, e);
+        }
     }
 }
