@@ -16,6 +16,7 @@
 
 package com.linkedin.drelephant.analysis;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.linkedin.drelephant.ElephantContext;
 import com.linkedin.drelephant.math.Statistics;
 import controllers.MetricsController;
@@ -24,6 +25,7 @@ import java.net.URL;
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import models.AppResult;
+import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.security.authentication.client.AuthenticatedURL;
 import org.apache.hadoop.security.authentication.client.AuthenticationException;
@@ -45,7 +47,7 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
   private static final String RM_NODE_STATE_URL = "%s://%s/ws/v1/cluster/info";
   private static final String FETCH_INITIAL_WINDOW_MS = "drelephant.analysis.fetch.initial.windowMillis";
 
-  private static Configuration configuration;
+  private Configuration configuration;
 
   // We provide one minute job fetch delay due to the job sending lag from AM/NM to JobHistoryServer HDFS
   private static final long FETCH_DELAY = 60000;
@@ -67,7 +69,7 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
 
   private final Queue<AnalyticJob> _firstRetryQueue = new ConcurrentLinkedQueue<AnalyticJob>();
 
-  private final ArrayList<AnalyticJob> _secondRetryQueue = new ArrayList<AnalyticJob>();
+  private final List<AnalyticJob> _secondRetryQueue = new LinkedList<AnalyticJob>();
 
   public void updateResourceManagerAddresses() {
     if (Boolean.valueOf(configuration.get(IS_RM_HA_ENABLED))) {
@@ -102,7 +104,7 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
           } catch (AuthenticationException e) {
             logger.info("Error fetching resource manager " + id + " state " + e.getMessage());
           } catch (IOException e) {
-            logger.info("Error fetching Json for resource manager "+ id + " status " + e.getMessage());
+            logger.info("Error fetching Json for resource manager " + id + " status " + e.getMessage());
           }
         }
       }
@@ -114,6 +116,16 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
               "Cannot get YARN resource manager address from Hadoop Configuration property: [" + RESOURCE_MANAGER_ADDRESS_HTTPS
                       + "].");
     }
+  }
+
+  @Override
+  public String getEffectiveResourceManagerAddress() {
+    return _resourceManagerAddress;
+  }
+
+  @Override
+  public long getFetchStartTime() {
+    return _fetchStartTime;
   }
 
   @Override
@@ -130,9 +142,9 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
   }
 
   /**
-   *  Fetch all the succeeded and failed applications/analytic jobs from the resource manager.
+   * Fetch all the succeeded and failed applications/analytic jobs from the resource manager.
    *
-   * @return
+   * @return a list of {@link AnalyticJob} objects based on applications fetched from RM.
    * @throws IOException
    * @throws AuthenticationException
    */
@@ -172,17 +184,26 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
       appList.add(_firstRetryQueue.poll());
     }
 
-    Iterator iteratorSecondRetry = _secondRetryQueue.iterator();
-    while (iteratorSecondRetry.hasNext()) {
-      AnalyticJob job = (AnalyticJob) iteratorSecondRetry.next();
-      if(job.readyForSecondRetry()) {
-        appList.add(job);
-        iteratorSecondRetry.remove();
-      }
-    }
+    // Fetch jobs from second retry queue which are ready for second retry and
+    // add to app list.
+    fetchJobsFromSecondRetryQueue(appList);
 
     _lastTime = _currentTime;
     return appList;
+  }
+
+  @VisibleForTesting
+  void fetchJobsFromSecondRetryQueue(List<AnalyticJob> appList) {
+    synchronized (_secondRetryQueue) {
+      Iterator iteratorSecondRetry = _secondRetryQueue.iterator();
+      while (iteratorSecondRetry.hasNext()) {
+        AnalyticJob job = (AnalyticJob) iteratorSecondRetry.next();
+        if (job.readyForSecondRetry()) {
+          appList.add(job);
+          iteratorSecondRetry.remove();
+        }
+      }
+    }
   }
 
   @Override
@@ -194,9 +215,12 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
   }
 
   @Override
-  public void addIntoSecondRetryQueue(AnalyticJob promise) {
-    _secondRetryQueue.add(promise.setTimeToSecondRetry());
-    int secondRetryQueueSize = _secondRetryQueue.size();
+  public void addIntoSecondRetryQueue(AnalyticJob job) {
+    int secondRetryQueueSize;
+    synchronized (_secondRetryQueue) {
+      _secondRetryQueue.add(job.setTimeToSecondRetry());
+      secondRetryQueueSize = _secondRetryQueue.size();
+    }
     MetricsController.setSecondRetryQueueSize(secondRetryQueueSize);
     logger.info("Second Retry queue size is " + secondRetryQueueSize);
   }
@@ -249,7 +273,7 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
         String user = app.get("user").getValueAsText();
         String name = app.get("name").getValueAsText();
         String queueName = app.get("queue").getValueAsText();
-        String trackingUrl = app.get("trackingUrl") != null? app.get("trackingUrl").getValueAsText() : null;
+        String trackingUrl = app.get("trackingUrl") != null ? app.get("trackingUrl").getValueAsText() : null;
         long startTime = app.get("startedTime").getLongValue();
         long finishTime = app.get("finishedTime").getLongValue();
 

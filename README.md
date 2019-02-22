@@ -11,7 +11,7 @@
 
 For more information on Dr. Elephant, check the wiki pages [here](https://github.com/linkedin/dr-elephant/wiki).
 
-For quick setup instructions: [Click here](https://github.com/linkedin/dr-elephant/wiki/Quick-Setup-Instructions)
+For quick setup instructions: [Click here](https://github.com/linkedin/dr-elephant/wiki/Quick-Setup-Instructions-(Must-Read))
 
 Developer guide: [Click here](https://github.com/linkedin/dr-elephant/wiki/Developer-Guide)
 
@@ -23,7 +23,7 @@ Engineering Blog: [Click here](https://engineering.linkedin.com/blog/2016/04/dr-
 
 ## Mailing-list & Github Issues
 
-Google groups mailing list: [Click here](https://groups.google.com/forum/#!forum/dr-elephant-users)
+Google groups mailing list: [Click here](https://groups.google.com/forum/#!forum/dr-elephant-users) (Reached upper limit! please create github issues)
 
 Github issues: [click here](https://github.com/linkedin/dr-elephant/issues)
 

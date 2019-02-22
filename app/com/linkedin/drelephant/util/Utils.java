@@ -49,6 +49,7 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.*;
+import play.Play;
 
 
 /**
@@ -58,6 +59,8 @@ public final class Utils {
   private static final Logger logger = Logger.getLogger(Utils.class);
 
   private static final String TRUNCATE_SUFFIX = "...";
+  /** Milliseconds in one day. */
+  private static final long MILLIS_ONE_DAY = 86400000L;
 
   private Utils() {
     // do nothing
@@ -74,6 +77,16 @@ public final class Utils {
   }
 
   /**
+   * Given a mapreduce job's job id, get its corresponding YARN application id.
+   *
+   * @param jobId The job id of the job
+   * @return the corresponding application id
+   */
+  public static String getApplicationIdFromJobId(String jobId) {
+    return jobId.replaceAll("job", "application");
+  }
+
+  /**
    * Load an XML document from a file path
    *
    * @param filePath The file path to load
@@ -82,7 +95,7 @@ public final class Utils {
   public static Document loadXMLDoc(String filePath) {
     InputStream instream = null;
     logger.info("Loading configuration file " + filePath);
-    instream = ClassLoader.getSystemClassLoader().getResourceAsStream(filePath);
+    instream = Play.application().resourceAsStream(filePath);
 
     if (instream == null) {
       logger.info("Configuation file not present in classpath. File:  " + filePath);
@@ -568,5 +581,29 @@ public final class Utils {
       datasets.add(element);
     }
     return datasets;
+  }
+
+  /**
+   * Returns the timestamp of that day's start timestamp (that is midnight 00:00:00 AM) for a given input timestamp.
+   * For instance, if the supplied timestamp is 100000, this method would return 86400, which corresponds to
+   * 2 January 1970, 00:00:00 GMT.
+   *
+   * @param ts Timestamp for which top of the day timestamp is to be found.
+   * @return Timestamp of that day's beginning (midnight)
+   */
+  public static long getTopOfTheDayTimestamp(long ts) {
+    return (ts - (ts % MILLIS_ONE_DAY));
+  }
+
+  /**
+   * Returns the timestamp of next day's start timestamp (that is midnight 00:00:00 AM) for a given input timestamp.
+   * For instance, if the supplied timestamp is 100000, this method would return 172800, which corresponds to
+   * 3 January 1970, 00:00:00 GMT.
+   *
+   * @param ts Timestamp for which next top of the day timestamp is to be found.
+   * @return Timestamp of next day's beginning (midnight)
+   */
+  public static long getNextTopOfTheDayTimestamp(long ts) {
+    return (getTopOfTheDayTimestamp(ts) + MILLIS_ONE_DAY);
   }
 }

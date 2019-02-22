@@ -21,7 +21,6 @@ import play.Application;
 import play.GlobalSettings;
 import play.Logger;
 
-import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.logging.Level;
@@ -32,25 +31,27 @@ import java.util.logging.Level;
  */
 public class Global extends GlobalSettings {
 
-  DrElephant _drElephant;
+  Thread _drElephantThread;
 
   public void onStart(Application app) {
     Logger.info("Starting Application...");
 
     fixJavaKerberos();
 
-    try {
-      _drElephant = new DrElephant();
-      _drElephant.start();
-    } catch (IOException e) {
-      Logger.error("Application start failed...", e);
-    }
+    _drElephantThread = new Thread(DrElephant.getInstance());
+    _drElephantThread.start();
   }
 
   public void onStop(Application app) {
     Logger.info("Stopping application...");
-    if (_drElephant != null) {
-      _drElephant.kill();
+    if (_drElephantThread != null) {
+      DrElephant.getInstance().kill();
+      _drElephantThread.interrupt();
+      try {
+        _drElephantThread.join();
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      }
     }
   }
 

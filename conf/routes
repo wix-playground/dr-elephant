@@ -33,7 +33,7 @@ GET        /newjobhistory                       controllers.Application.jobHisto
 GET        /newhelp                             controllers.Application.help()
 
 # Rest calls
-GET        /rest/job                            controllers.Application.restAppResult(id: String)
+GET        /rest/job                            controllers.Application.restAppResult(id: String, prioritize: Boolean ?= false)
 GET        /rest/jobexec                        controllers.Application.restJobExecResult(id: String)
 GET        /rest/flowexec                       controllers.Application.restFlowExecResult(id: String)
 GET        /rest/search                         controllers.Application.restSearch()

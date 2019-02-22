@@ -220,8 +220,8 @@ object ExecutorsHeuristic {
 
   object Distribution {
     def apply(values: Seq[Long]): Distribution = {
-      val sortedValues = if (values.isEmpty) {
-        Seq(-1)
+      val sortedValues:Seq[Long] = if (values.isEmpty) {
+        Seq(42)
       } else {
         values.sorted
       }

@@ -74,16 +74,29 @@ public class JobDefinition extends Model {
   @Column(length = JOB_NAME_LIMIT, nullable = false)
   public String jobDefUrl;
 
+  @Column(nullable = false)
   @ManyToOne(cascade = CascadeType.ALL)
   @JoinTable(name = "flow_definition", joinColumns = {@JoinColumn(name = "flow_definition_id", referencedColumnName = "id")})
   public FlowDefinition flowDefinition;
 
-  @Column(nullable = true)
+  @Column(nullable = false)
   public Timestamp createdTs;
 
-  @Column(nullable = true)
+  @Column(nullable = false)
   @UpdatedTimestamp
   public Timestamp updatedTs;
+
+  @Override
+  public void save() {
+    this.updatedTs = new Timestamp(System.currentTimeMillis());
+    super.save();
+  }
+
+  @Override
+  public void update() {
+    this.updatedTs = new Timestamp(System.currentTimeMillis());
+    super.update();
+  }
 
   public static Finder<Integer, JobDefinition> find =
       new Finder<Integer, JobDefinition>(Integer.class, JobDefinition.class);

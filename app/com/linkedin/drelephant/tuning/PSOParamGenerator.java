@@ -18,17 +18,15 @@ package com.linkedin.drelephant.tuning;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.linkedin.drelephant.ElephantContext;
-
-import org.apache.hadoop.conf.Configuration;
-import org.apache.log4j.Logger;
-
-import play.libs.Json;
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.log4j.Logger;
+import play.libs.Json;
 
 
 /**
@@ -36,12 +34,11 @@ import java.util.List;
  */
 public class PSOParamGenerator extends ParamGenerator {
 
-  private final Logger logger = Logger.getLogger(PSOParamGenerator.class);
   private static final String PARAMS_TO_TUNE_FIELD_NAME = "parametersToTune";
   private static final String PYTHON_PATH_CONF = "python.path";
   private static final String PSO_DIR_PATH_ENV_VARIABLE = "PSO_DIR_PATH";
   private static final String PYTHON_PATH_ENV_VARIABLE = "PYTHONPATH";
-
+  private final Logger logger = Logger.getLogger(PSOParamGenerator.class);
   private String PYTHON_PATH = null;
   private String TUNING_SCRIPT_PATH = null;
 
@@ -78,9 +75,7 @@ public class PSOParamGenerator extends ParamGenerator {
     newJobTuningInfo.setJobType(jobTuningInfo.getJobType());
 
     JsonNode jsonJobTuningInfo = Json.toJson(jobTuningInfo);
-    logger.info("Job Tuning Info for " + jobTuningInfo.getTuningJob().jobName + ": " + jsonJobTuningInfo);
     String parametersToTune = jsonJobTuningInfo.get(PARAMS_TO_TUNE_FIELD_NAME).toString();
-    logger.info("Parameters to tune for job: " + parametersToTune);
     String stringTunerState = jobTuningInfo.getTunerState();
     stringTunerState = stringTunerState.replaceAll("\\s+", "");
     String jobType = jobTuningInfo.getJobType().toString();
@@ -88,14 +83,14 @@ public class PSOParamGenerator extends ParamGenerator {
     List<String> error = new ArrayList<String>();
 
     try {
-      logger.info(
-          "Calling PSO with Job type = " + jobType + " StringTunerState= " + stringTunerState + "\nand Parameters to tune: " + parametersToTune);
       Process p = Runtime.getRuntime()
-          .exec(PYTHON_PATH + " " + TUNING_SCRIPT_PATH + " " + stringTunerState + " " + parametersToTune + " " + jobType);
-      BufferedReader inputStream = new BufferedReader(new InputStreamReader(p.getInputStream()));
-      BufferedReader errorStream = new BufferedReader(new InputStreamReader(p.getErrorStream()));
+          .exec(
+              PYTHON_PATH + " " + TUNING_SCRIPT_PATH + " " + stringTunerState + " " + parametersToTune + " " + jobType);
+      BufferedReader inputStream = new BufferedReader(
+          new InputStreamReader(p.getInputStream(), Charset.forName("UTF-8")));
+      BufferedReader errorStream = new BufferedReader(
+          new InputStreamReader(p.getErrorStream(), Charset.forName("UTF-8")));
       String updatedStringTunerState = inputStream.readLine();
-      logger.info("Output from PSO script: " + updatedStringTunerState);
       newJobTuningInfo.setTunerState(updatedStringTunerState);
       String errorLine;
       while ((errorLine = errorStream.readLine()) != null) {

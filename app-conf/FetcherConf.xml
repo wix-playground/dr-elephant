@@ -93,7 +93,8 @@
 
   <!--
   This is an experimental fetcher for Spark applications which uses SHS REST API to get application metrics
-  and WebHDFS to get application properties from eventlogs.
+  and WebHDFS to get application properties from eventlogs. Please note that this fetcher also supports backfill.
+  But backfill implementation in this fetcher relies upon SHS REST APIs' which are only available since Spark 2.3 
 
    <fetcher>
     <applicationtype>spark</applicationtype>

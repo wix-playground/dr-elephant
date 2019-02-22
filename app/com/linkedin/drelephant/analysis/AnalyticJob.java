@@ -17,11 +17,13 @@
 package com.linkedin.drelephant.analysis;
 
 import com.linkedin.drelephant.ElephantContext;
+import com.linkedin.drelephant.priorityexecutor.Priority;
 import com.linkedin.drelephant.util.InfoExtractor;
 import com.linkedin.drelephant.util.Utils;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.Future;
 import models.AppHeuristicResult;
 import models.AppHeuristicResultDetails;
 import models.AppResult;
@@ -61,7 +63,13 @@ public class AnalyticJob {
   private String _user;
   private String _trackingUrl;
   private long _startTime;
-  private long _finishTime;
+  private long _finishTime = -1;
+  private Future<?> _jobFuture;
+  // Flag used for tracking if job was pushed for analysis during backfill without known finish time.
+  private boolean _isBackfilledWithNoFinishTime = false;
+  // Backfill timestamp for the app type.
+  private long _backfillTs;
+  private Priority _jobExecutionPriority = Priority.NORMAL;
 
   /**
    * Returns the application type
@@ -160,6 +168,38 @@ public class AnalyticJob {
   }
 
   /**
+   * Sets the future for this job after submission to executor for analysis.
+   *
+   * @param future Future returned upon submission to executor.
+   * @return The analytic job
+   */
+  public AnalyticJob setJobFuture(Future<?> future) {
+    _jobFuture = future;
+    return this;
+  }
+
+  /**
+   * Sets the priority at which job will be executed for analysis.
+   *
+   * @param priority Priority of execution.
+   * @return The analytic job
+   */
+  public AnalyticJob setJobExecutionPriority(Priority priority) {
+    _jobExecutionPriority = priority;
+    return this;
+  }
+
+  /**
+   * Sets the flag to indicate whether the job was backfilled, as it was not available in Resource Manager.
+   *
+   * @return The analytic job
+   */
+  public AnalyticJob setIsBackfilledWithNoFinishTime() {
+    _isBackfilledWithNoFinishTime = true;
+    return this;
+  }
+
+  /**
    * Returns the application id
    *
    * @return The analytic job
@@ -223,6 +263,27 @@ public class AnalyticJob {
   }
 
   /**
+   * Returns the Future for this job which was returned upon job submission to executor.
+   *
+   * @return The {@link Future} object
+   */
+  public Future<?> getJobFuture() { return _jobFuture; }
+
+  /**
+   * Returns the job execution priority.
+   *
+   * @return The job execution priority.
+   */
+  public Priority getJobExecutionPriority() { return _jobExecutionPriority; }
+
+  /**
+   * Returns the flag which indicates whether the job was backfilled or not.
+   *
+   * @return The flag indicating whether job was backfilled.
+   */
+  public boolean getIsBackfilledWithNoFinishTime() { return _isBackfilledWithNoFinishTime; }
+
+  /**
    * Sets the tracking url for the job
    *
    * @param trackingUrl The url to track the job
@@ -278,12 +339,16 @@ public class AnalyticJob {
     // Load app information
     AppResult result = new AppResult();
     result.id = Utils.truncateField(getAppId(), AppResult.ID_LIMIT, getAppId());
-    result.trackingUrl = Utils.truncateField(getTrackingUrl(), AppResult.TRACKING_URL_LIMIT, getAppId());
-    result.queueName = Utils.truncateField(getQueueName(), AppResult.QUEUE_NAME_LIMIT, getAppId());
-    result.username = Utils.truncateField(getUser(), AppResult.USERNAME_LIMIT, getAppId());
+    result.trackingUrl = getTrackingUrl() != null ?
+        Utils.truncateField(getTrackingUrl(), AppResult.TRACKING_URL_LIMIT, getAppId()): "";
+    result.queueName = getQueueName() != null ?
+        Utils.truncateField(getQueueName(), AppResult.QUEUE_NAME_LIMIT, getAppId()): "";
+    result.username = getUser() != null ?
+        Utils.truncateField(getUser(), AppResult.USERNAME_LIMIT, getAppId()) : "";
     result.startTime = getStartTime();
     result.finishTime = getFinishTime();
-    result.name = Utils.truncateField(getName(), AppResult.APP_NAME_LIMIT, getAppId());
+    result.name = getName() != null ?
+        Utils.truncateField(getName(), AppResult.APP_NAME_LIMIT, getAppId()) : "";
     result.jobType = Utils.truncateField(jobTypeName, AppResult.JOBTYPE_LIMIT, getAppId());
     result.resourceUsed = hadoopAggregatedData.getResourceUsed();
     result.totalDelay = hadoopAggregatedData.getTotalDelay();

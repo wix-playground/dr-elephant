@@ -21,6 +21,7 @@ import com.avaje.ebean.Query;
 import com.codahale.metrics.Timer;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.linkedin.drelephant.DrElephant;
 import com.linkedin.drelephant.ElephantContext;
 import com.linkedin.drelephant.analysis.Metrics;
 import com.linkedin.drelephant.analysis.Severity;
@@ -71,6 +72,7 @@ import views.html.page.oldJobHistoryPage;
 import views.html.page.searchPage;
 import views.html.results.*;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -861,11 +863,20 @@ public class Application extends Controller {
     return unixTime;
   }
 
+  private static AppResult getAppResultForId(String id) {
+    return AppResult.find.select("*")
+        .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS, "*")
+        .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS + "." + AppHeuristicResult.TABLE.APP_HEURISTIC_RESULT_DETAILS, "*")
+        .where()
+        .idEq(id)
+        .findUnique();
+  }
+
   /**
    * Rest API for searching a particular job information
-   * E.g, localhost:8080/rest/job?id=xyz
+   * E.g, localhost:8080/rest/job?id=xyz&prioritize=true
    */
-  public static Result restAppResult(String id) {
+  public static Result restAppResult(String id, Boolean prioritize) {
 
     if (id == null || id.isEmpty()) {
       return badRequest("No job id provided.");
@@ -874,18 +885,20 @@ public class Application extends Controller {
       id = id.replaceAll("job", "application");
     }
 
-    AppResult result = AppResult.find.select("*")
-        .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS, "*")
-        .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS + "." + AppHeuristicResult.TABLE.APP_HEURISTIC_RESULT_DETAILS, "*")
-        .where()
-        .idEq(id)
-        .findUnique();
+    AppResult result = getAppResultForId(id);
 
     if (result != null) {
       return ok(Json.toJson(result));
-    } else {
-      return notFound("Unable to find record on id: " + id);
     }
+    // If prioritize flag is set, resubmit the job at higher priority and wait for it to complete.
+    if (prioritize && DrElephant.getInstance().getElephant().prioritizeExecutionAndWait(id)) {
+      // The analysis job has completed. Get the result.
+      result = getAppResultForId(id);
+    }
+    if (result != null) {
+      return ok(Json.toJson(result));
+    }
+    return notFound("Unable to find record on id: " + id);
   }
 
   /**
@@ -914,6 +927,10 @@ public class Application extends Controller {
       String client = paramValueMap.get("client");
       String scheduler = paramValueMap.get("scheduler");
       String defaultParams = paramValueMap.get("defaultParams");
+      Integer version = 1;
+      if (paramValueMap.containsKey("version")) {
+        version = Integer.parseInt(paramValueMap.get("version"));
+      }
       Boolean isRetry = false;
       if (paramValueMap.containsKey("isRetry")) {
         isRetry = Boolean.parseBoolean(paramValueMap.get("isRetry"));
@@ -948,6 +965,7 @@ public class Application extends Controller {
       tuningInput.setClient(client);
       tuningInput.setScheduler(scheduler);
       tuningInput.setDefaultParams(defaultParams);
+      tuningInput.setVersion(version);
       tuningInput.setRetry(isRetry);
       tuningInput.setSkipExecutionForOptimization(skipExecutionForOptimization);
       tuningInput.setJobType(jobType);
@@ -960,21 +978,44 @@ public class Application extends Controller {
     } catch (Exception e) {
       AutoTuningMetricsController.markGetCurrentRunParametersFailures();
       logger.error("Exception parsing input: ", e);
-      return notFound("Error parsing input ");
-    }finally{
-      if(context!=null)
-      {
+      return notFound("Error parsing input " + e.getMessage());
+    } finally {
+      if (context != null) {
         context.stop();
       }
     }
   }
 
-  private static Result getCurrentRunParameters(TuningInput tuningInput) {
+  private static JsonNode formatGetCurrentRunParametersOutput(Map<String, Double> outputParams, Integer version) {
+    if (version == 1) {
+      return Json.toJson(outputParams);
+    } else {
+      Map<String, String> outputParamFormatted = new HashMap<String, String>();
+
+      //Temporarily removing input split parameters
+      outputParams.remove("pig.maxCombinedSplitSize");
+      outputParams.remove("mapreduce.input.fileinputformat.split.maxsize");
+
+      for (Map.Entry<String, Double> param : outputParams.entrySet()) {
+        if (param.getKey().equals("mapreduce.map.sort.spill.percent")) {
+          outputParamFormatted.put(param.getKey(), String.valueOf(param.getValue()));
+        } else if (param.getKey().equals("mapreduce.map.java.opts")
+            || param.getKey().equals("mapreduce.reduce.java.opts")) {
+          outputParamFormatted.put(param.getKey(), "-Xmx" + Math.round(param.getValue()) + "m");
+        } else {
+          outputParamFormatted.put(param.getKey(), String.valueOf(Math.round(param.getValue())));
+        }
+      }
+      return Json.toJson(outputParamFormatted);
+    }
+  }
+
+  private static Result getCurrentRunParameters(TuningInput tuningInput) throws Exception {
     AutoTuningAPIHelper autoTuningAPIHelper = new AutoTuningAPIHelper();
     Map<String, Double> outputParams = autoTuningAPIHelper.getCurrentRunParameters(tuningInput);
     if (outputParams != null) {
       logger.info("Output params " + outputParams);
-      return ok(Json.toJson(outputParams));
+      return ok(formatGetCurrentRunParametersOutput(outputParams, tuningInput.getVersion()));
     } else {
       AutoTuningMetricsController.markGetCurrentRunParametersFailures();
       return notFound("Unable to find parameters. Job id: " + tuningInput.getJobDefId() + " Flow id: "
