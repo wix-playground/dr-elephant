@@ -220,7 +220,11 @@ object ExecutorsHeuristic {
 
   object Distribution {
     def apply(values: Seq[Long]): Distribution = {
-      val sortedValues = values.sorted
+      val sortedValues = if (values.isEmpty) {
+        Seq(-1)
+      } else {
+        values.sorted
+      }
       val sortedValuesAsJava = sortedValues.map(Long.box).to[ArrayBuffer].asJava
       Distribution(
         sortedValues.min,
